@@ -1,0 +1,1219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ITIL Outage Game — Control + Wallboard</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --text:#e7eefc; --muted:#9fb2d6;
+      --good:#2ee59d; --warn:#ffcc66; --bad:#ff5c7a;
+      --accent:#6aa6ff;
+      --shadow: 0 8px 30px rgba(0,0,0,.35);
+      --radius:16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:var(--sans); color:var(--text);
+      background:radial-gradient(1200px 800px at 20% 0%, #182a5d 0%, var(--bg) 45%) fixed;}
+
+    header{padding:18px 22px 10px; display:flex; gap:16px; align-items:center; justify-content:space-between;}
+    header .title{display:flex; flex-direction:column; gap:4px;}
+    header h1{margin:0; font-size:18px; letter-spacing:.3px;}
+    header .sub{color:var(--muted); font-size:12px;}
+
+    /* Burn-down bar */
+    #progressBarWrap{height:8px; margin:0 22px 14px; border-radius:999px;
+      background:rgba(255,255,255,.10); overflow:hidden; border:1px solid rgba(255,255,255,.08)}
+    #progressBar{height:100%; width:100%; transform-origin:right center;
+      background:linear-gradient(90deg, rgba(46,229,157,.95), rgba(255,204,102,.95), rgba(255,92,122,.95));}
+
+    .wrap{padding:0 22px 22px; display:grid; gap:16px; grid-template-columns:2fr 1fr;}
+    .grid{display:grid; gap:16px; grid-template-columns:repeat(2, minmax(260px, 1fr));}
+
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:var(--radius); box-shadow:var(--shadow); padding:16px;}
+
+    /* Business panel mood gradients */
+    .biz{position:relative; overflow:hidden;}
+    .biz.heat-0{background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));}
+    .biz.heat-1{background:linear-gradient(180deg, rgba(255,204,102,.16), rgba(255,255,255,.03));}
+    .biz.heat-2{background:linear-gradient(180deg, rgba(255,92,122,.22), rgba(255,255,255,.03));}
+    .biz.heat-3{background:linear-gradient(180deg, rgba(255,92,122,.35), rgba(255,255,255,.02));}
+
+    .biz .name{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+    .biz .name b{font-size:15px;}
+
+    .pill{font-size:11px; padding:4px 9px; border-radius:999px; border:1px solid rgba(255,255,255,.15);}
+    .pill.up{color:#07121f; border-color:rgba(46,229,157,.75); background:rgba(46,229,157,.92); font-weight:800;}
+    .pill.down{color:#07121f; border-color:rgba(255,92,122,.75); background:rgba(255,92,122,.92); font-weight:900;}
+
+    .metrics{margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+    .metric{background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px;}
+    .metric .k{color:var(--muted); font-size:11px; margin-bottom:4px;}
+    .metric .v{font-family:var(--mono); font-size:18px; letter-spacing:.2px;}
+    .loss{color: var(--warn);} .rev{color: var(--good);}
+
+    .overlay{
+      position:absolute; inset:-40px -40px auto auto; width:160px; height:160px; border-radius:999px;
+      background:radial-gradient(circle at 30% 30%, rgba(106,166,255,.35), rgba(106,166,255,0) 65%);
+      pointer-events:none; opacity:.55;
+    }
+
+    .side{display:flex; flex-direction:column; gap:16px;}
+    .side .card{background:linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03));}
+
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+    button{
+      appearance:none; border:1px solid rgba(255,255,255,.15); background:rgba(106,166,255,.12);
+      color:var(--text); padding:9px 12px; border-radius:12px; cursor:pointer; font-weight:600;
+    }
+    button:hover{background:rgba(106,166,255,.18)}
+    button:disabled{opacity:.45; cursor:not-allowed}
+    .btn-danger{background:rgba(255,92,122,.12);} .btn-danger:hover{background:rgba(255,92,122,.18);}
+    .btn-ghost{background:rgba(255,255,255,.06);} .btn-ghost:hover{background:rgba(255,255,255,.09);}
+
+    .control-block{display:flex; flex-direction:column; gap:10px;}
+    label{font-size:12px; color:var(--muted);}
+    select, input{
+      width:100%; padding:9px 10px; border-radius:12px; border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.22); color:var(--text);
+    }
+
+    .big{font-family:var(--mono); font-size:22px;}
+    .statusline{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px;
+      background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08); border-radius:12px;}
+    .statusline .label{color:var(--muted); font-size:12px;}
+
+    .log{max-height:240px; overflow:auto; font-family:var(--mono); font-size:12px; line-height:1.35;
+      background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px;}
+    .log .t{color:rgba(255,255,255,.75)}
+    .log .e{color:rgba(255,204,102,.95)}
+    .log .r{color:rgba(46,229,157,.95)}
+
+    .footer-note{color:var(--muted); font-size:12px;}
+
+    /* Modal */
+    .modal.hidden{display:none;}
+    .modal{position:fixed; inset:0; z-index:9999;}
+    .modal-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.75); backdrop-filter: blur(2px);}
+    .modal-card{
+      position:relative;
+      margin:4vh auto;
+      width:min(1000px, 92vw);
+      max-height:92vh;
+      overflow:auto;
+      border-radius:18px;
+      background:linear-gradient(180deg, rgba(15,20,40,.96), rgba(10,14,30,.96));
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 18px 60px rgba(0,0,0,.65);
+      padding:14px;
+    }
+    .modal-head{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:6px 6px 12px;}
+    .modal-body{padding:6px;}
+    .score-kpis{display:grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap:10px; margin-bottom:12px;}
+    .kpi{background:rgba(0,0,0,.24); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:10px;}
+    .kpi .k{color:var(--muted); font-size:11px; margin-bottom:4px;}
+    .kpi .v{font-family:var(--mono); font-size:18px;}
+    .tablewrap{background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:10px;}
+
+    table{width:100%; border-collapse:collapse; font-size:12px;}
+    th, td{padding:8px 6px; border-bottom:1px solid rgba(255,255,255,.10); text-align:left;}
+    th{color:var(--muted); font-weight:700;}
+
+    /* Audio row */
+    .audio-row{display:flex; align-items:center; gap:10px;}
+    .audio-row button{white-space:nowrap;}
+    .audio-row input[type="range"]{width:auto; flex:1; max-width:180px;}
+
+    /* Mode visibility */
+    body.mode-control .boardOnly{display:none !important;}
+    body.mode-board   .controlOnly{display:none !important;}
+
+    /* Control layout */
+    .inlineGrid{display:grid; grid-template-columns:repeat(2, minmax(220px, 1fr)); gap:10px;}
+    .turboGrid{display:grid; grid-template-columns:repeat(2, minmax(180px, 1fr)); gap:10px;}
+    .small{font-size:12px; color:var(--muted)}
+
+    /* Dev status chip */
+    .chip{display:inline-flex; gap:8px; align-items:center; padding:4px 9px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.14); background:rgba(0,0,0,.18); color:var(--muted); font-size:12px;}
+    .dot{width:8px; height:8px; border-radius:50%; background:rgba(255,92,122,.9);} 
+    .dot.ok{background:rgba(46,229,157,.9);}
+  </style>
+</head>
+<body>
+
+<header class="boardOnly">
+  <div class="title">
+    <h1>ITIL Outage Game — Wallboard</h1>
+    <div class="sub">Projector view • admin-driven • no backends</div>
+  </div>
+  <div class="row">
+    <div class="statusline" style="min-width:290px;">
+      <div>
+        <div class="label">Round</div>
+        <div class="big"><span id="roundNum">0</span> / <span id="roundTotal">4</span></div>
+      </div>
+      <div>
+        <div class="label">Round Timer</div>
+        <div class="big" id="roundTimer">00:00</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div id="progressBarWrap" class="boardOnly"><div id="progressBar"></div></div>
+
+<div class="wrap">
+  <section class="grid boardOnly" id="bizGrid"></section>
+
+  <aside class="side">
+
+    <div class="card controlOnly">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <div class="label">Control Panel</div>
+          <div class="big">Facilitator</div>
+          <div class="small">Default view is control. Launch projector view with the button below.</div>
+        </div>
+        <div class="chip" id="linkChip"><span class="dot" id="linkDot"></span><span id="linkText">Board: not connected</span></div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button id="launchBoardBtn" class="btn-ghost">Launch Dashboard</button>
+        <button id="launchAllBtn" class="btn-ghost">Single Screen</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08); margin:14px 0;">
+
+      <div class="control-block" id="configBlock">
+        <label>Simulation Setup</label>
+        <div class="inlineGrid">
+          <div>
+            <label>Number of Rounds</label>
+            <select id="roundCountSelect">
+              <option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option>
+            </select>
+          </div>
+          <div>
+            <label>Round Duration (minutes)</label>
+            <select id="roundDurationSelect">
+              <option>1</option><option>5</option><option selected>10</option>
+            </select>
+          </div>
+          <div>
+            <label>Number of Business Units</label>
+            <select id="buCountSelect">
+              <option>1</option><option>2</option><option>3</option><option selected>4</option>
+            </select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="applyConfigBtn" class="btn-ghost">Apply Setup</button>
+          </div>
+        </div>
+        <div class="small">Setup only applies before Round 1. During a game, setup changes are ignored.</div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08); margin:14px 0;">
+
+      <div class="row" style="margin-top:4px;">
+        <button id="startRoundBtn">Start Round</button>
+        <button id="pauseBtn" class="btn-ghost" disabled>Pause</button>
+        <button id="endRoundBtn" class="btn-ghost" disabled>End Round</button>
+        <button id="resetBtn" class="btn-danger">Reset All</button>
+        <button id="openScoreBtn" class="btn-ghost">Scorecard</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08); margin:14px 0;">
+
+      <div class="control-block">
+        <label>Audio</label>
+        <div class="row audio-row">
+          <input id="volumeSlider" type="range" min="0" max="100" value="35">
+          <button id="toggleMusicBtn" class="btn-ghost">Music: Off</button>
+        </div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08); margin:14px 0;">
+
+      <div class="control-block">
+        <label>Business Unit Names</label>
+        <div id="buNameInputs" class="inlineGrid"></div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08); margin:14px 0;">
+
+      <div class="control-block">
+        <label>Turbo (Change without comms)</label>
+        <div id="turboButtons" class="turboGrid"></div>
+        <div class="small">Each click increases that BU revenue by +10% (persists across rounds). Refresh page to clear Turbo.</div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08); margin:14px 0;">
+
+      <div class="control-block">
+        <label>Trigger Outage</label>
+        <div class="row">
+          <select id="bizSelect"></select>
+        </div>
+        <div class="row">
+          <button id="triggerBtn" class="btn-danger" disabled>Trigger</button>
+          <button id="resolveBtn" disabled>Resolve</button>
+          <button id="randomBtn" class="btn-ghost" disabled>Random Outage</button>
+        </div>
+        <div class="row">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="markCorrect" checked style="width:auto;">
+            Mark resolution as “Correct Answer”
+          </label>
+        </div>
+      </div>
+
+      <div class="footer-note" style="margin-top:10px;">
+        Tip: Use Control on your laptop, Board on the projector.
+      </div>
+    </div>
+
+    <div class="card boardOnly">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <div class="label">Simulation State</div>
+          <div class="big" id="simState">Idle</div>
+        </div>
+        <div>
+          <div class="label">Total Revenue Lost</div>
+          <div class="big loss" id="totalLost">$0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Event Log</div>
+      <div class="log" id="log"></div>
+    </div>
+
+  </aside>
+</div>
+
+<div id="scoreModal" class="modal hidden boardOnly" role="dialog" aria-modal="true" aria-labelledby="scoreTitle">
+  <div class="modal-backdrop" id="scoreBackdrop"></div>
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="label">ITIL Outage Game</div>
+        <div class="big" id="scoreTitle">Scorecard</div>
+      </div>
+      <button class="btn-ghost" id="closeScoreBtn">Close</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="score-kpis">
+        <div class="kpi">
+          <div class="k">Avg TTR Improvement vs R1</div>
+          <div class="v" id="kpiTtrImprove">—</div>
+        </div>
+        <div class="kpi">
+          <div class="k">Revenue Lost / Incident Improvement vs R1</div>
+          <div class="v" id="kpiLossPerIncImprove">—</div>
+        </div>
+        <div class="kpi">
+          <div class="k">Total Revenue Lost (All Rounds)</div>
+          <div class="v loss" id="kpiTotalLoss">—</div>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Round</th>
+              <th>Incidents</th>
+              <th>Avg TTR</th>
+              <th>Revenue Lost</th>
+              <th>Correct %</th>
+            </tr>
+          </thead>
+          <tbody id="modalScoreRows"></tbody>
+        </table>
+      </div>
+
+      <div class="tablewrap" style="margin-top:12px;">
+        <div class="label" style="margin:6px 0;">Per-Business Downtime &amp; Loss (by Round)</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Round</th>
+              <th>Business Unit</th>
+              <th>Downtime</th>
+              <th>Loss</th>
+            </tr>
+          </thead>
+          <tbody id="modalBuRows"></tbody>
+        </table>
+      </div>
+
+      <div class="row" style="margin-top:12px; justify-content:flex-end;">
+        <button class="btn-ghost" id="copySummaryBtn">Copy Summary</button>
+        <button id="downloadJsonBtn">Download JSON</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="sfxOutage" src="outage.mp3" preload="auto"></audio>
+<audio id="bgMusic" src="background.mp3" preload="auto" loop></audio>
+
+<script>
+  // ===================== Mode & Channel =====================
+  const params = new URLSearchParams(location.search);
+  const MODE = (params.get('mode') || 'control').toLowerCase();
+  document.body.classList.add(`mode-${MODE}`);
+
+  const IS_BOARD = (MODE === 'board' || MODE === 'all');
+  const IS_CONTROL = (MODE === 'control' || MODE === 'all');
+
+  // Launch buttons
+  document.getElementById('launchBoardBtn')?.addEventListener('click', () => {
+    window.open(location.pathname + '?mode=board', 'itil-wallboard');
+  });
+  document.getElementById('launchAllBtn')?.addEventListener('click', () => {
+    location.search = '?mode=all';
+  });
+
+  // Transport: BroadcastChannel if available, else localStorage fallback (file:// safe)
+  const channelName = 'itil-wallboard';
+  const bc = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel(channelName) : null;
+  const LS_KEY = '__itil_wallboard_bus__';
+
+  function send(msg){
+    const payload = { ...msg, _ts: Date.now(), _nonce: Math.random().toString(16).slice(2) };
+    if(bc){
+      bc.postMessage(payload);
+    } else {
+      // storage event triggers in other windows
+      localStorage.setItem(LS_KEY, JSON.stringify(payload));
+    }
+  }
+
+  function onMessage(handler){
+    if(bc){
+      bc.onmessage = (e) => handler(e.data);
+    }
+    window.addEventListener('storage', (e) => {
+      if(e.key !== LS_KEY || !e.newValue) return;
+      try{ handler(JSON.parse(e.newValue)); } catch(_){}
+    });
+  }
+
+  // ===================== Utilities =====================
+  const fmtMoney = n => n.toLocaleString(undefined, {style:'currency', currency:'USD', maximumFractionDigits:0});
+  const pad2 = n => String(n).padStart(2,'0');
+  const fmtTime = s => `${pad2(Math.floor(s/60))}:${pad2(s%60)}`;
+  const now = () => new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+  // ===================== Config =====================
+  let config = { roundsTotal: 4, roundDurationSec: 10*60, businessCount: 4 };
+  const TICK_MS = 250;
+
+  // ===================== Outage code pool =====================
+  const BU_BUCKET_SIZE = 16;
+  const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  function toBase32Fixed3(n){
+    const a = CODE_ALPHABET;
+    return `${a[(n >> 10) & 31]}${a[(n >> 5) & 31]}${a[n & 31]}`;
+  }
+  let seed = 123456789;
+  function rand32(){
+    seed ^= seed << 13; seed |= 0;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;  seed |= 0;
+    return (seed >>> 0);
+  }
+  function buildScrambledUniqueCodePool64(){
+    const used = new Set();
+    const codes = [];
+    while(codes.length < 64){
+      const n = rand32() & 0x7FFF;
+      if(used.has(n)) continue;
+      used.add(n);
+      codes.push(toBase32Fixed3(n));
+    }
+    return codes;
+  }
+  const codePool = buildScrambledUniqueCodePool64();
+  function getBucketForBiz(bizId){
+    const start = bizId * BU_BUCKET_SIZE;
+    return codePool.slice(start, start + BU_BUCKET_SIZE);
+  }
+  function nextOutageCodeForBiz(bizId){
+    const bucket = getBucketForBiz(bizId);
+    return bucket[Math.floor(Math.random() * bucket.length)];
+  }
+
+  // ===================== Businesses =====================
+  const businesses = [
+    { id:0, name:'Business Unit A', revenuePerMin: 8000 },
+    { id:1, name:'Business Unit B', revenuePerMin: 6500 },
+    { id:2, name:'Business Unit C', revenuePerMin: 9000 },
+    { id:3, name:'Business Unit D', revenuePerMin: 7200 }
+  ];
+
+  // ===================== State =====================
+  let roundNum = 0;
+  let roundSecondsRemaining = config.roundDurationSec;
+  let ticker = null;
+  let lastTick = null;
+  let paused = false;
+
+  // Control-only mirror
+  let controlActiveOutages = [];
+  let boardConnected = false;
+
+  const state = {
+    sim: 'Idle',
+    totals: { lost: 0 },
+    currentRound: { incidents: 0, correct: 0, totalTTR: 0, lost: 0 },
+    history: []
+  };
+
+  const bizState = businesses.map(b => ({
+    ...b,
+    baseRevenuePerMin: b.revenuePerMin,
+    revenueMultiplier: 1,
+    up: true,
+    lost: 0,
+    earned: 0,
+    downtimeSecThisRound: 0,
+    activeIncident: null
+  }));
+
+  function isBizActive(bizId){ return bizId < config.businessCount; }
+
+  // ===================== DOM =====================
+  const bizGrid = document.getElementById('bizGrid');
+  const bizSelect = document.getElementById('bizSelect');
+  const roundNumEl = document.getElementById('roundNum');
+  const roundTotalEl = document.getElementById('roundTotal');
+  const roundTimerEl = document.getElementById('roundTimer');
+  const simStateEl = document.getElementById('simState');
+  const totalLostEl = document.getElementById('totalLost');
+
+  const startRoundBtn = document.getElementById('startRoundBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const endRoundBtn = document.getElementById('endRoundBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const openScoreBtn = document.getElementById('openScoreBtn');
+
+  const triggerBtn = document.getElementById('triggerBtn');
+  const resolveBtn = document.getElementById('resolveBtn');
+  const randomBtn = document.getElementById('randomBtn');
+  const markCorrect = document.getElementById('markCorrect');
+
+  const logEl = document.getElementById('log');
+  const progressBar = document.getElementById('progressBar');
+
+  const roundCountSelect = document.getElementById('roundCountSelect');
+  const roundDurationSelect = document.getElementById('roundDurationSelect');
+  const buCountSelect = document.getElementById('buCountSelect');
+  const applyConfigBtn = document.getElementById('applyConfigBtn');
+  const buNameInputs = document.getElementById('buNameInputs');
+  const turboButtons = document.getElementById('turboButtons');
+
+  const linkDot = document.getElementById('linkDot');
+  const linkText = document.getElementById('linkText');
+
+  const scoreModal = document.getElementById('scoreModal');
+  const scoreBackdrop = document.getElementById('scoreBackdrop');
+  const closeScoreBtn = document.getElementById('closeScoreBtn');
+  const modalScoreRows = document.getElementById('modalScoreRows');
+  const modalBuRows = document.getElementById('modalBuRows');
+  const kpiTtrImprove = document.getElementById('kpiTtrImprove');
+  const kpiLossPerIncImprove = document.getElementById('kpiLossPerIncImprove');
+  const kpiTotalLoss = document.getElementById('kpiTotalLoss');
+  const copySummaryBtn = document.getElementById('copySummaryBtn');
+  const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+
+  const sfxOutage = document.getElementById('sfxOutage');
+  const bgMusic = document.getElementById('bgMusic');
+  const toggleMusicBtn = document.getElementById('toggleMusicBtn');
+  const volumeSlider = document.getElementById('volumeSlider');
+  let musicOn = false;
+
+  // ===================== Helpers =====================
+  function log(line, cls='t'){
+    const div = document.createElement('div');
+    div.className = cls;
+    div.textContent = `[${now()}] ${line}`;
+    logEl.prepend(div);
+  }
+
+  function setSimState(s){
+    state.sim = s;
+    if(simStateEl) simStateEl.textContent = s;
+  }
+
+  function activeOutagesCount(){
+    return bizState.filter(b => isBizActive(b.id) && b.activeIncident).length;
+  }
+
+  function computeHeatClass(b){
+    if(!b.activeIncident) return 'heat-0';
+    const n = activeOutagesCount();
+    return `heat-${Math.min(3, Math.max(1, n))}`;
+  }
+
+  function broadcastState(){
+    send({
+      type:'STATE',
+      sim: state.sim,
+      roundNum,
+      paused,
+      activeOutages: bizState.filter(b => isBizActive(b.id) && b.activeIncident).map(b => b.id),
+      roundsTotal: config.roundsTotal,
+      roundDurationSec: config.roundDurationSec,
+      businessCount: config.businessCount
+    });
+  }
+
+  function setLinkStatus(ok, label){
+    boardConnected = ok;
+    if(linkDot) linkDot.classList.toggle('ok', !!ok);
+    if(linkText) linkText.textContent = label;
+  }
+
+  // ===================== Rendering =====================
+  function renderSelectors(){
+    if(!bizSelect) return;
+    bizSelect.innerHTML = '';
+    bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = b.name;
+      bizSelect.appendChild(opt);
+    });
+  }
+
+  function renderBizCards(){
+    if(!bizGrid) return;
+    bizGrid.innerHTML = '';
+    bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+      const el = document.createElement('div');
+      el.className = `card biz ${computeHeatClass(b)}`;
+      el.dataset.biz = b.id;
+      el.innerHTML = `
+        <div class="overlay"></div>
+        <div class="name">
+          <b>${b.name}</b>
+          <span class="pill ${b.up ? 'up' : 'down'}">${b.up ? 'UP' : 'DOWN'}</span>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="k">Revenue / min</div><div class="v rev">${fmtMoney(b.baseRevenuePerMin * b.revenueMultiplier)}</div></div>
+          <div class="metric"><div class="k">Revenue lost (this round)</div><div class="v loss" data-loss="${b.id}">${fmtMoney(b.lost)}</div></div>
+          <div class="metric"><div class="k">Revenue earned (this round)</div><div class="v" data-earned="${b.id}">${fmtMoney(b.earned)}</div></div>
+          <div class="metric"><div class="k">Incident</div><div class="v" data-incident="${b.id}">${b.activeIncident ? b.activeIncident.errorCode : '—'}</div></div>
+        </div>
+      `;
+      bizGrid.appendChild(el);
+    });
+  }
+
+  function updateBizNumbers(){
+    bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+      const lossEl = document.querySelector(`[data-loss="${b.id}"]`);
+      const earnedEl = document.querySelector(`[data-earned="${b.id}"]`);
+      const incEl = document.querySelector(`[data-incident="${b.id}"]`);
+      if(lossEl) lossEl.textContent = fmtMoney(b.lost);
+      if(earnedEl) earnedEl.textContent = fmtMoney(b.earned);
+      if(incEl) incEl.textContent = b.activeIncident ? b.activeIncident.errorCode : '—';
+    });
+  }
+
+  function updateTop(){
+    if(roundNumEl) roundNumEl.textContent = roundNum;
+    if(roundTotalEl) roundTotalEl.textContent = config.roundsTotal;
+    if(roundTimerEl) roundTimerEl.textContent = fmtTime(Math.max(0, Math.ceil(roundSecondsRemaining)));
+    if(totalLostEl) totalLostEl.textContent = fmtMoney(state.totals.lost);
+
+    if(progressBar){
+      const denom = Math.max(1, config.roundDurationSec);
+      const p = Math.max(0, Math.min(1, roundSecondsRemaining / denom));
+      progressBar.style.transform = `scaleX(${p})`;
+    }
+  }
+
+  function setButtons(){
+    const running = state.sim === 'Running';
+
+    // in control-only, require board connection to enable actions
+    const controlGate = (IS_CONTROL && !IS_BOARD) ? boardConnected : true;
+
+    if(startRoundBtn) startRoundBtn.disabled = !controlGate || running || roundNum >= config.roundsTotal;
+    if(pauseBtn) pauseBtn.disabled = !controlGate || !running;
+    if(endRoundBtn) endRoundBtn.disabled = !controlGate || !running;
+
+    if(triggerBtn) triggerBtn.disabled = !controlGate || !running;
+    if(randomBtn) randomBtn.disabled = !controlGate || !running;
+
+	const selectedId = bizSelect ? Number(bizSelect.value) : null;
+
+	if (resolveBtn) {
+	  if (IS_CONTROL && !IS_BOARD) {
+		const hasOutage =
+		  controlActiveOutages.includes(selectedId) ||
+		  controlActiveOutages.length > 0; // fallback during sync gap
+
+		resolveBtn.disabled = !running || !hasOutage;
+	  } else {
+		const selected = bizSelect ? bizState.find(b => b.id === selectedId) : null;
+		resolveBtn.disabled = !running || !(selected && selected.activeIncident);
+	  }
+	}
+
+    const lock = running || roundNum > 0;
+    if(roundCountSelect) roundCountSelect.disabled = lock;
+    if(roundDurationSelect) roundDurationSelect.disabled = lock;
+    if(buCountSelect) buCountSelect.disabled = lock;
+    if(applyConfigBtn) applyConfigBtn.disabled = lock;
+
+    if(pauseBtn) pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  }
+
+  // ===================== Control UI builders =====================
+  function applyConfigFromUI(){
+    if(!roundCountSelect || !roundDurationSelect || !buCountSelect) return;
+    config.roundsTotal = Number(roundCountSelect.value);
+    config.roundDurationSec = Number(roundDurationSelect.value) * 60;
+    config.businessCount = Number(buCountSelect.value);
+    roundSecondsRemaining = config.roundDurationSec;
+    renderSelectors();
+    updateTop();
+    setButtons();
+  }
+
+  function renderBuNameInputs(){
+    if(!buNameInputs) return;
+    buNameInputs.innerHTML = '';
+    bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+      const wrap = document.createElement('div');
+      wrap.style.display = 'flex';
+      wrap.style.flexDirection = 'column';
+      const lab = document.createElement('label');
+      lab.textContent = `BU ${b.id+1} Name`;
+      const inp = document.createElement('input');
+      inp.value = b.name;
+      inp.addEventListener('input', () => {
+        const name = inp.value;
+        b.name = name;
+        renderSelectors();
+        renderBizCards();
+        renderTurboButtons();
+        send({ type:'SET_BU_NAME', bizId: b.id, name });
+      });
+      wrap.appendChild(lab);
+      wrap.appendChild(inp);
+      buNameInputs.appendChild(wrap);
+    });
+  }
+
+  function turbo(bizId){
+    const b = bizState.find(x => x.id === bizId);
+    if(!b || !isBizActive(b.id)) return;
+    b.revenueMultiplier *= 1.10;
+    renderBizCards();
+  }
+
+  function renderTurboButtons(){
+    if(!turboButtons) return;
+    turboButtons.innerHTML = '';
+    bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-ghost';
+      btn.textContent = `⚡ Turbo ${b.name} (+10%)`;
+      btn.addEventListener('click', () => {
+        turbo(b.id);
+        log(`${b.name} TURBO applied. Multiplier now x${b.revenueMultiplier.toFixed(2)}`, 't');
+        send({ type:'TURBO', bizId: b.id });
+      });
+      turboButtons.appendChild(btn);
+    });
+  }
+
+  // ===================== Audio =====================
+  function setVolume(v){
+    const vol = Math.max(0, Math.min(1, v));
+    if(sfxOutage) sfxOutage.volume = vol;
+    if(bgMusic) bgMusic.volume = vol;
+  }
+
+  async function toggleMusic(){
+    musicOn = !musicOn;
+    if(toggleMusicBtn) toggleMusicBtn.textContent = `Music: ${musicOn ? 'On' : 'Off'}`;
+    try{ if(musicOn) await bgMusic.play(); else bgMusic.pause(); }
+    catch(e){ log('Browser blocked autoplay. Click again after any interaction.', 't'); }
+  }
+
+  if(volumeSlider){
+    setVolume(0.35);
+    volumeSlider.addEventListener('input', e => {
+      const v = Number(e.target.value)/100;
+      setVolume(v);
+      send({ type:'SET_VOLUME', value: v });
+    });
+  }
+
+  toggleMusicBtn?.addEventListener('click', async () => {
+    await toggleMusic();
+    send({ type:'TOGGLE_MUSIC' });
+  });
+
+  // ===================== Scorecard modal =====================
+  function openModal(){
+    renderModalScorecard();
+    scoreModal.classList.remove('hidden');
+  }
+  function closeModal(){ scoreModal.classList.add('hidden'); }
+
+  scoreBackdrop?.addEventListener('click', closeModal);
+  closeScoreBtn?.addEventListener('click', closeModal);
+
+  openScoreBtn?.addEventListener('click', () => {
+    if(IS_CONTROL && !IS_BOARD) send({ type:'OPEN_SCORECARD' });
+    if(IS_BOARD) openModal();
+  });
+
+  function pctImprove(oldVal, newVal){
+    if(oldVal <= 0 || newVal < 0) return '—';
+    const change = ((oldVal - newVal) / oldVal) * 100;
+    return `${Math.round(change)}% ${change >= 0 ? 'improvement' : 'worse'}`;
+  }
+
+  function renderModalScorecard(){
+    const rounds = Array.from({length: config.roundsTotal}, (_,i)=>i+1).map(r => state.history.find(h => h.round === r) || null);
+    modalScoreRows.innerHTML = '';
+    modalBuRows.innerHTML = '';
+    let totalLossAll = 0;
+
+    rounds.forEach((h, idx) => {
+      const r = idx + 1;
+      if(!h){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r}</td><td>—</td><td>—</td><td>—</td><td>—</td>`;
+        modalScoreRows.appendChild(tr);
+        bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+          const trb = document.createElement('tr');
+          trb.innerHTML = `<td>${r}</td><td>${b.name}</td><td>—</td><td>—</td>`;
+          modalBuRows.appendChild(trb);
+        });
+        return;
+      }
+      totalLossAll += h.lost;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${h.round}</td><td>${h.incidents}</td><td>${h.avgTTR}</td><td>${fmtMoney(h.lost)}</td><td>${h.correctPct}</td>`;
+      modalScoreRows.appendChild(tr);
+
+      (h.perBU || []).forEach(b => {
+        const trb = document.createElement('tr');
+        trb.innerHTML = `<td>${h.round}</td><td>${b.name}</td><td>${fmtTime(Math.round(b.downtimeSec))}</td><td>${fmtMoney(b.lost)}</td>`;
+        modalBuRows.appendChild(trb);
+      });
+    });
+
+    const r1 = state.history.find(h => h.round === 1);
+    const latest = state.history[state.history.length - 1];
+
+    kpiTotalLoss.textContent = fmtMoney(totalLossAll);
+
+    if(r1 && latest && r1.incidents > 0 && latest.incidents > 0){
+      const r1AvgTtrSec = Math.round((r1._totalTTR || 0) / r1.incidents);
+      const latestAvgTtrSec = Math.round((latest._totalTTR || 0) / latest.incidents);
+      const r1LossPerInc = r1.lost / r1.incidents;
+      const latestLossPerInc = latest.lost / latest.incidents;
+      kpiTtrImprove.textContent = pctImprove(r1AvgTtrSec, latestAvgTtrSec);
+      kpiLossPerIncImprove.textContent = pctImprove(r1LossPerInc, latestLossPerInc);
+    } else {
+      kpiTtrImprove.textContent = '—';
+      kpiLossPerIncImprove.textContent = '—';
+    }
+  }
+
+  function buildSummaryText(){
+    const lines = [];
+    lines.push('ITIL Outage Game — Scorecard');
+    lines.push(`Total Lost: ${fmtMoney(state.totals.lost)}`);
+    lines.push('');
+    state.history.forEach(h => {
+      lines.push(`Round ${h.round}: Incidents=${h.incidents}, AvgTTR=${h.avgTTR}, Lost=${fmtMoney(h.lost)}, Correct=${h.correctPct}`);
+      (h.perBU || []).forEach(b => lines.push(`  - ${b.name}: Down ${fmtTime(Math.round(b.downtimeSec))}, Lost ${fmtMoney(b.lost)}`));
+    });
+    return lines.join('\n');
+  }
+
+  copySummaryBtn?.addEventListener('click', async () => {
+    try{ await navigator.clipboard.writeText(buildSummaryText()); log('Scorecard summary copied.', 't'); }
+    catch(e){ log('Clipboard blocked. Use Download JSON.', 't'); }
+  });
+
+  downloadJsonBtn?.addEventListener('click', () => {
+    const data = { generatedAt: new Date().toISOString(), totals: state.totals, rounds: state.history };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `itil-outage-game-scorecard.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // ===================== Simulation (board authority) =====================
+  function startRound(){
+    if(roundNum >= config.roundsTotal) return;
+    paused = false;
+    roundNum += 1;
+    roundSecondsRemaining = config.roundDurationSec;
+    lastTick = performance.now();
+
+    bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+      b.up = true;
+      b.lost = 0;
+      b.earned = 0;
+      b.activeIncident = null;
+      b.downtimeSecThisRound = 0;
+    });
+
+    state.currentRound = { incidents:0, correct:0, totalTTR:0, lost:0 };
+    setSimState('Running');
+    log(`Round ${roundNum} started.`, 'r');
+
+    if(ticker) clearInterval(ticker);
+    ticker = setInterval(tick, TICK_MS);
+
+    renderSelectors();
+    renderBizCards();
+    updateTop();
+    setButtons();
+
+    broadcastState();
+  }
+
+  function endRound(){
+    if(state.sim !== 'Running') return;
+
+    bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+      if(b.activeIncident){
+        const ttr = Math.round((performance.now() - b.activeIncident.startedAtMs) / 1000);
+        state.currentRound.totalTTR += ttr;
+        b.downtimeSecThisRound += ttr;
+        b.activeIncident = null;
+        b.up = true;
+      }
+    });
+
+    if(ticker) clearInterval(ticker);
+    ticker = null;
+
+    setSimState('Reporting');
+
+    const incidents = state.currentRound.incidents;
+    const avgTTR = incidents ? Math.round(state.currentRound.totalTTR / incidents) : 0;
+    const correctPct = incidents ? Math.round((state.currentRound.correct / incidents) * 100) : 0;
+
+    state.history.push({
+      round: roundNum,
+      incidents,
+      avgTTR: fmtTime(avgTTR),
+      lost: state.currentRound.lost,
+      correctPct: `${correctPct}%`,
+      _totalTTR: state.currentRound.totalTTR,
+      perBU: bizState.filter(b=>isBizActive(b.id)).map(b => ({ name: b.name, downtimeSec: b.downtimeSecThisRound || 0, lost: b.lost }))
+    });
+
+    log(`Round ${roundNum} ended. AvgTTR=${fmtTime(avgTTR)} Lost=${fmtMoney(state.currentRound.lost)}`, 'e');
+
+    updateTop();
+    setButtons();
+    renderBizCards();
+
+    broadcastState();
+  }
+
+  function resetAll(){
+    if(ticker) clearInterval(ticker);
+    ticker = null;
+
+    roundNum = 0;
+    paused = false;
+    roundSecondsRemaining = config.roundDurationSec;
+
+    state.totals.lost = 0;
+    state.history = [];
+    state.currentRound = { incidents:0, correct:0, totalTTR:0, lost:0 };
+
+    bizState.forEach(b => {
+      b.up = true;
+      b.lost = 0;
+      b.earned = 0;
+      b.activeIncident = null;
+      b.downtimeSecThisRound = 0;
+    });
+
+    setSimState('Idle');
+    renderSelectors();
+    renderBizCards();
+    renderBuNameInputs();
+    renderTurboButtons();
+    updateTop();
+    setButtons();
+
+    log('Reset complete.', 't');
+    broadcastState();
+  }
+
+  function triggerOutage(bizId){
+    const b = bizState.find(x => x.id === bizId);
+    if(!b || !isBizActive(b.id) || b.activeIncident) return;
+
+    b.up = false;
+    b.activeIncident = { errorCode: nextOutageCodeForBiz(b.id), startedAtMs: performance.now() };
+
+    state.currentRound.incidents += 1;
+    log(`ALERT: ${b.name} DOWN (code ${b.activeIncident.errorCode}).`, 'e');
+
+    try{ if(sfxOutage){ sfxOutage.currentTime = 0; sfxOutage.play(); } } catch(e){}
+
+    if(bizSelect) bizSelect.value = String(b.id);
+    send({ type:'FOCUS_BIZ', bizId: b.id });
+
+    renderBizCards();
+    setButtons();
+
+    broadcastState();
+  }
+
+  function resolveSelected(){
+    const id = bizSelect ? Number(bizSelect.value) : null;
+    const b = bizState.find(x => x.id === id);
+    if(!b || !b.activeIncident) {
+      log('No active outage for selected unit.', 't');
+      return;
+    }
+
+    const ttr = Math.round((performance.now() - b.activeIncident.startedAtMs) / 1000);
+    state.currentRound.totalTTR += ttr;
+    if(markCorrect && markCorrect.checked) state.currentRound.correct += 1;
+
+    b.downtimeSecThisRound += ttr;
+
+    log(`RESOLVED: ${b.name} UP. TTR=${fmtTime(ttr)}. ${(markCorrect && markCorrect.checked) ? 'Correct.' : 'Incorrect.'}`, 'r');
+
+    b.activeIncident = null;
+    b.up = true;
+
+    renderBizCards();
+    setButtons();
+
+    broadcastState();
+  }
+
+  function randomOutage(){
+    const candidates = bizState.filter(b => isBizActive(b.id) && !b.activeIncident);
+    if(candidates.length === 0) return;
+    const pick = candidates[Math.floor(Math.random()*candidates.length)];
+    triggerOutage(pick.id);
+  }
+
+  function tick(){
+    if(state.sim !== 'Running' || paused) return;
+
+    const t = performance.now();
+    const dtSec = (t - lastTick) / 1000;
+    lastTick = t;
+
+    roundSecondsRemaining -= dtSec;
+    if(roundSecondsRemaining <= 0){
+      roundSecondsRemaining = 0;
+      endRound();
+      return;
+    }
+
+    bizState.filter(b=>isBizActive(b.id)).forEach(b => {
+      const perSec = (b.baseRevenuePerMin * b.revenueMultiplier) / 60;
+      const delta = perSec * dtSec;
+      if(b.up){
+        b.earned += delta;
+      } else {
+        b.lost += delta;
+        state.currentRound.lost += delta;
+        state.totals.lost += delta;
+      }
+    });
+
+    updateBizNumbers();
+    updateTop();
+    setButtons();
+  }
+
+  // ===================== Wiring =====================
+  applyConfigBtn?.addEventListener('click', () => {
+    if(state.sim !== 'Idle' || roundNum > 0) return;
+    applyConfigFromUI();
+    log(`Setup applied: rounds=${config.roundsTotal}, duration=${config.roundDurationSec/60}m, BUs=${config.businessCount}`, 't');
+    send({ type:'SET_CONFIG', config: { ...config } });
+    broadcastState();
+  });
+
+  startRoundBtn?.addEventListener('click', () => {
+    send({ type:'START_ROUND' });
+    if(IS_BOARD) startRound();
+  });
+
+  pauseBtn?.addEventListener('click', () => {
+    send({ type:'PAUSE_TOGGLE' });
+    if(IS_BOARD){
+      paused = !paused;
+      if(!paused) lastTick = performance.now();
+      setButtons();
+      log(paused ? 'Paused.' : 'Resumed.', 't');
+      broadcastState();
+    }
+  });
+
+  endRoundBtn?.addEventListener('click', () => {
+    send({ type:'END_ROUND' });
+    if(IS_BOARD) endRound();
+  });
+
+  resetBtn?.addEventListener('click', () => {
+    send({ type:'RESET_ALL' });
+    if(IS_BOARD) resetAll();
+  });
+
+  triggerBtn?.addEventListener('click', () => {
+    const id = Number(bizSelect.value);
+    send({ type:'TRIGGER_OUTAGE', bizId: id });
+    if(IS_BOARD) triggerOutage(id);
+  });
+
+  resolveBtn?.addEventListener('click', () => {
+    const id = Number(bizSelect.value);
+    send({ type:'RESOLVE_OUTAGE', bizId: id });
+    if(IS_BOARD){ bizSelect.value = String(id); resolveSelected(); }
+  });
+
+  randomBtn?.addEventListener('click', () => {
+    send({ type:'RANDOM_OUTAGE' });
+    if(IS_BOARD) randomOutage();
+  });
+
+  // ===================== Receive =====================
+  onMessage((m) => {
+    if(!m || !m.type) return;
+
+    // Control mirrors board state
+    if(IS_CONTROL && !IS_BOARD){
+      if(m.type === 'HELLO'){
+        setLinkStatus(True, 'Board: connected');
+        setButtons();
+        return;
+      }
+      if(m.type === 'FOCUS_BIZ'){
+        if(bizSelect) bizSelect.value = String(m.bizId);
+        setButtons();
+        return;
+      }
+      if(m.type === 'STATE'){
+        setLinkStatus(true, 'Board: connected');
+        state.sim = m.sim;
+        roundNum = m.roundNum;
+        paused = m.paused;
+        controlActiveOutages = m.activeOutages || [];
+        config.roundsTotal = m.roundsTotal ?? config.roundsTotal;
+        config.roundDurationSec = m.roundDurationSec ?? config.roundDurationSec;
+        config.businessCount = m.businessCount ?? config.businessCount;
+        setButtons();
+        updateTop();
+        return;
+      }
+      return;
+    }
+
+    // Board processes commands
+    if(IS_BOARD){
+      switch(m.type){
+        case 'START_ROUND': startRound(); break;
+        case 'PAUSE_TOGGLE':
+          paused = !paused;
+          if(!paused) lastTick = performance.now();
+          setButtons();
+          log(paused ? 'Paused.' : 'Resumed.', 't');
+          broadcastState();
+          break;
+        case 'END_ROUND': endRound(); break;
+        case 'RESET_ALL': resetAll(); break;
+        case 'TRIGGER_OUTAGE': triggerOutage(m.bizId); break;
+        case 'RESOLVE_OUTAGE':
+          if(bizSelect) bizSelect.value = String(m.bizId);
+          resolveSelected();
+          break;
+        case 'RANDOM_OUTAGE': randomOutage(); break;
+        case 'SET_CONFIG':
+          if(state.sim === 'Idle' && roundNum === 0){
+            config = { ...config, ...m.config };
+            roundSecondsRemaining = config.roundDurationSec;
+            renderSelectors();
+            renderBizCards();
+            renderBuNameInputs();
+            renderTurboButtons();
+            updateTop();
+            setButtons();
+            broadcastState();
+          }
+          break;
+        case 'SET_BU_NAME':
+          {
+            const b = bizState.find(x=>x.id===m.bizId);
+            if(b){ b.name = m.name || b.name; renderSelectors(); renderBizCards(); renderBuNameInputs(); renderTurboButtons(); broadcastState(); }
+          }
+          break;
+        case 'TURBO':
+          turbo(m.bizId);
+          renderTurboButtons();
+          broadcastState();
+          break;
+        case 'SET_VOLUME': setVolume(m.value); break;
+        case 'TOGGLE_MUSIC': toggleMusic(); break;
+        case 'OPEN_SCORECARD': openModal(); break;
+      }
+
+      if(m.type === 'FOCUS_BIZ'){
+        if(bizSelect) bizSelect.value = String(m.bizId);
+      }
+    }
+  });
+
+  // ===================== Init =====================
+  if(roundCountSelect) roundCountSelect.value = String(config.roundsTotal);
+  if(roundDurationSelect) roundDurationSelect.value = String(config.roundDurationSec/60);
+  if(buCountSelect) buCountSelect.value = String(config.businessCount);
+
+  renderSelectors();
+  renderBizCards();
+  renderBuNameInputs();
+  renderTurboButtons();
+  updateTop();
+  setButtons();
+  setSimState('Idle');
+
+  // Board announces itself
+  if(IS_BOARD){
+    send({ type:'HELLO' });
+    broadcastState();
+  }
+
+  log(`Ready. Mode=${MODE}`, 't');
+</script>
+</body>
+</html>
